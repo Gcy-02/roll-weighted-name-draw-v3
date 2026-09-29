@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-trae-theme="dark"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>点名器 · 权重抽取舞台</title>
+<link href="https://miaoda.feishu.cn/fonts/css2?family=Cinzel:wght@500;700&family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a12'/%3E%3Ccircle cx='32' cy='32' r='15' fill='%23e8c468'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0a0a12;--bg2:#101019;--surface:#13131e;--surface2:#1a1a28;
+  --line:rgba(232,196,104,.13);--line2:rgba(255,255,255,.05);
+  --gold:#e8c468;--gold-dim:#b8954a;--gold-glow:rgba(232,196,104,.35);
+  --red:#d4475a;--green:#4ecb71;
+  --text:#f2ecda;--muted:#7a7589;--muted2:#4a4658;
+  --serif:'Noto Serif SC','Cinzel',serif;
+  --display:'Cinzel','Noto Serif SC',serif;
+  --sans:'Noto Sans SC',system-ui,sans-serif;
+  --radius:12px;--radius-lg:16px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{height:100%;-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--sans);background:var(--bg);color:var(--text);
+  overflow-x:hidden;min-height:100vh;
+  background-image:
+    radial-gradient(ellipse 90% 50% at 50% -10%,rgba(232,196,104,.09),transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 110%,rgba(212,71,90,.05),transparent 60%);
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.45;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .035 0'/%3E/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode:overlay;
+}
+
+/* === LAYOUT === */
+.app{position:relative;z-index:1;max-width:1440px;margin:0 auto;padding:20px 20px 48px}
+@media(min-width:768px){.app{padding:28px 28px 60px}}
+@media(min-width:1200px){.app{padding:32px 36px 64px}}
+
+header.top{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+  padding-bottom:18px;margin-bottom:20px;border-bottom:1px solid var(--line);
+  flex-wrap:wrap;
+}
+.brand h1{
+  font-family:var(--serif);font-weight:900;
+  font-size:clamp(26px,4vw,48px);letter-spacing:.02em;line-height:1;
+  background:linear-gradient(180deg,#fff7e0 0%,var(--gold) 70%,var(--gold-dim) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.brand .sub{
+  font-family:var(--display);font-weight:500;font-size:11px;
+  letter-spacing:.4em;text-transform:uppercase;color:var(--gold-dim);margin-top:6px;
+}
+.top-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.top-meta{font-size:12px;color:var(--muted);text-align:right;line-height:1.7}
+.top-meta b{color:var(--gold);font-weight:500}
+.role-badge{
+  font-size:11px;letter-spacing:.08em;padding:4px 12px;border-radius:20px;
+  font-family:var(--display);
+}
+.role-badge.admin{background:rgba(232,196,104,.12);border:1px solid var(--gold-dim);color:var(--gold)}
+.role-badge.viewer{background:rgba(78,203,113,.1);border:1px solid rgba(78,203,113,.3);color:var(--green)}
+.conn-dot{
+  width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px;
+  vertical-align:middle;
+}
+.conn-dot.on{background:var(--green);box-shadow:0 0 8px rgba(78,203,113,.5)}
+.conn-dot.off{background:var(--red);box-shadow:0 0 8px rgba(212,71,90,.4)}
+
+/* === GRID === */
+.grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:18px;align-items:start;
+}
+@media(min-width:900px){.grid{grid-template-columns:320px 1fr 290px;gap:20px}}
+@media(min-width:1200px){.grid{grid-template-columns:340px 1fr 310px;gap:22px}}
+
+/* === PANEL === */
+.panel{
+  background:linear-gradient(180deg,var(--surface) 0%,var(--bg2) 100%);
+  border:1px solid var(--line2);border-radius:var(--radius-lg);padding:18px;
+}
+@media(min-width:768px){.panel{padding:20px}}
+.panel-title{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;
+}
+.panel-title h2{
+  font-family:var(--serif);font-weight:700;font-size:15px;
+  color:var(--text);letter-spacing:.04em;
+  display:flex;align-items:center;gap:7px;
+}
+.panel-title h2::before{
+  content:"";width:5px;height:5px;border-radius:50%;
+  background:var(--gold);box-shadow:0 0 8px var(--gold-glow);
+}
+.badge{
+  font-family:var(--display);font-size:10px;letter-spacing:.1em;
+  padding:2px 8px;border:1px solid var(--line);border-radius:20px;color:var(--gold);
+}
+
+/* === TABS (admin only) === */
+.tabs{
+  display:none;gap:2px;background:var(--bg);border-radius:10px;padding:3px;margin-bottom:14px;
+}
+.is-admin .tabs{display:flex}
+.tab{
+  flex:1;padding:8px 4px;border:none;background:transparent;
+  color:var(--muted);font-size:12px;font-family:var(--sans);cursor:pointer;
+  border-radius:8px;transition:all .2s;text-align:center;
+}
+.tab:hover{color:var(--text)}
+.tab.on{background:var(--surface2);color:var(--gold);font-weight:500}
+.tab-panel{display:none}
+.tab-panel.on{display:block}
+
+/* === LEFT: NAMES === */
+.import-area{display:flex;flex-direction:column;gap:10px}
+textarea.names{
+  width:100%;min-height:140px;resize:vertical;
+  background:#0b0b13;border:1px solid var(--line2);border-radius:10px;
+  padding:10px 12px;color:var(--text);font-family:var(--sans);
+  font-size:13px;line-height:1.65;outline:none;transition:border-color .2s;
+}
+@media(min-width:768px){textarea.names{min-height:180px;font-size:14px}}
+textarea.names:focus{border-color:var(--gold-dim)}
+textarea.names::placeholder{color:var(--muted2)}
+.file-row{display:flex;gap:8px}
+.file-btn{
+  flex:1;position:relative;overflow:hidden;cursor:pointer;
+  background:var(--surface2);border:1px dashed var(--line);
+  border-radius:10px;padding:10px;text-align:center;
+  font-size:12px;color:var(--muted);transition:all .2s;
+}
+.file-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+.file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.opt-row{display:flex;gap:8px}
+.opt{
+  flex:1;display:flex;align-items:center;gap:6px;
+  font-size:11px;color:var(--muted);cursor:pointer;
+  background:var(--surface2);border:1px solid var(--line2);
+  border-radius:8px;padding:8px;transition:all .2s;user-select:none;
+}
+.opt:hover{border-color:var(--gold-dim)}
+.opt input{accent-color:var(--gold);cursor:pointer}
+.opt.on{color:var(--gold);border-color:var(--line)}
+.name-stats{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 2px 0;font-size:12px;color:var(--muted);
+  border-top:1px solid var(--line2);margin-top:4px;
+}
+.name-stats .ct{color:var(--gold);font-weight:700;font-size:15px;font-family:var(--serif)}
+
+/* === WEIGHT PANEL === */
+.w-legend{
+  background:var(--bg);border:1px solid var(--line2);border-radius:10px;
+  padding:9px 11px;margin-bottom:11px;font-size:11px;color:var(--muted);
+  line-height:1.7;
+}
+.w-legend b{color:var(--gold);font-weight:500}
+.w-legend .sep{color:var(--muted2);margin:0 4px}
+.weight-list{
+  max-height:360px;overflow-y:auto;padding-right:3px;
+}
+.weight-list::-webkit-scrollbar{width:4px}
+.weight-list::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.w-card{
+  background:var(--surface2);border:1px solid var(--line2);
+  border-radius:10px;padding:9px 11px;margin-bottom:7px;
+  transition:border-color .2s,box-shadow .2s;
+}
+.w-card:hover{border-color:var(--line)}
+.w-card.cool{
+  border-color:rgba(78,203,113,.22);
+  box-shadow:0 0 14px rgba(78,203,113,.06);
+}
+.w-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.w-name{
+  font-size:13px;color:var(--text);font-weight:500;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;flex:1;
+}
+.w-count{
+  font-size:10px;color:var(--gold-dim);font-family:var(--display);
+  letter-spacing:.06em;background:rgba(232,196,104,.08);
+  border:1px solid var(--line);border-radius:20px;padding:2px 8px;white-space:nowrap;
+}
+.w-body{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.w-base{white-space:nowrap;font-family:var(--display);letter-spacing:.04em}
+.w-ctrl{display:flex;align-items:center;gap:3px;margin-left:auto}
+.w-ctrl button{
+  width:22px;height:22px;border:none;background:var(--bg);border:1px solid var(--line2);
+  color:var(--gold);font-size:13px;cursor:pointer;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+  font-family:var(--sans);
+}
+.w-ctrl button:hover{background:rgba(232,196,104,.1);border-color:var(--gold-dim)}
+.w-adj{
+  min-width:36px;text-align:center;font-family:var(--serif);font-weight:700;
+  font-size:12px;color:var(--text);
+}
+.w-adj.neg{color:var(--red)}
+.w-final{
+  min-width:34px;text-align:right;font-family:var(--serif);font-weight:700;
+  font-size:15px;color:var(--gold);
+}
+.w-bar-wrap{
+  width:100%;height:5px;background:var(--bg);border-radius:3px;overflow:hidden;
+  margin-top:8px;position:relative;
+}
+.w-bar{
+  height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));
+  border-radius:3px;transition:width .35s;min-width:2px;
+}
+.w-bar.zero{background:var(--muted2)}
+.w-eff{
+  font-size:10px;color:var(--green);margin-top:5px;
+  font-family:var(--display);letter-spacing:.04em;display:flex;align-items:center;gap:4px;
+}
+.w-eff::before{
+  content:"";width:5px;height:5px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 6px rgba(78,203,113,.5);
+}
+.w-eff.hide{display:none}
+.weight-actions{display:flex;gap:8px;margin-top:11px}
+.ghost-btn{
+  background:transparent;border:1px solid var(--line2);
+  color:var(--muted);font-size:11px;cursor:pointer;
+  padding:5px 10px;border-radius:20px;transition:all .2s;font-family:var(--sans);
+}
+.ghost-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+.ghost-btn.danger:hover{border-color:var(--red);color:var(--red)}
+
+/* === CENTER: STAGE === */
+.stage{
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 40%,rgba(232,196,104,.07),transparent 70%),
+    linear-gradient(180deg,#0c0c15 0%,#08080e 100%);
+  border:1px solid var(--line);border-radius:var(--radius-lg);
+  padding:24px 20px 28px;display:flex;flex-direction:column;
+  align-items:center;position:relative;overflow:hidden;min-height:480px;
+}
+@media(min-width:768px){.stage{padding:28px 24px 32px;min-height:560px}}
+.stage::before{
+  content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:50%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.5;
+}
+.stage-label{
+  font-family:var(--display);font-size:10px;letter-spacing:.5em;
+  text-transform:uppercase;color:var(--gold-dim);margin-bottom:4px;
+}
+.stage-hint{font-size:12px;color:var(--muted);margin-bottom:20px;text-align:center;line-height:1.7}
+@media(min-width:768px){.stage-hint{margin-bottom:24px}}
+.stage-hint b{color:var(--gold);font-weight:500}
+
+/* SLOTS */
+.slots{
+  display:flex;gap:10px;justify-content:center;flex-wrap:wrap;
+  width:100%;margin-bottom:24px;perspective:1000px;
+}
+@media(min-width:768px){.slots{gap:14px;margin-bottom:28px}}
+.slot{
+  flex:1 1 120px;min-width:100px;max-width:200px;
+  height:130px;position:relative;
+  background:linear-gradient(180deg,#060610,#0d0d1a);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  box-shadow:inset 0 25px 25px -18px rgba(0,0,0,.8),inset 0 -25px 25px -18px rgba(0,0,0,.8),0 0 20px rgba(232,196,104,.04);
+}
+@media(min-width:768px){.slot{flex:1 1 150px;min-width:130px;height:150px}}
+.slot::after{
+  content:"";position:absolute;left:0;right:0;top:50%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold-glow),transparent);pointer-events:none;
+}
+.slot-mask{
+  position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,#060610 0%,transparent 25%,transparent 75%,#060610 100%);
+}
+.reel{
+  position:absolute;left:0;right:0;top:50%;
+  transform:translateY(-50%);text-align:center;
+}
+.reel-item{
+  height:150px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--serif);font-weight:700;
+  font-size:clamp(20px,2.8vw,32px);
+  color:var(--text);letter-spacing:.04em;white-space:nowrap;padding:0 6px;
+}
+@media(min-width:768px){.reel-item{font-size:clamp(22px,3vw,34px);height:150px}}
+.reel-item.win{
+  color:var(--gold);
+  text-shadow:0 0 20px var(--gold-glow),0 0 40px rgba(232,196,104,.25);
+}
+.slot.empty .reel-item{color:var(--muted2);font-weight:300;font-size:16px}
+.slot.lit{
+  border-color:var(--gold);
+  box-shadow:inset 0 25px 25px -18px rgba(0,0,0,.5),inset 0 -25px 25px -18px rgba(0,0,0,.5),0 0 40px rgba(232,196,104,.2);
+  animation:lit .5s ease;
+}
+@keyframes lit{0%{transform:scale(.95)}50%{transform:scale(1.03)}100%{transform:scale(1)}}
+
+/* CONTROLS */
+.ctrl-row{
+  display:flex;align-items:center;justify-content:center;gap:14px;
+  margin-bottom:18px;flex-wrap:wrap;
+}
+@media(min-width:768px){.ctrl-row{gap:18px;margin-bottom:22px}}
+.count-ctrl{
+  display:flex;align-items:center;gap:0;
+  background:var(--surface2);border:1px solid var(--line2);
+  border-radius:30px;padding:3px;
+}
+.count-ctrl button{
+  width:32px;height:32px;border:none;background:transparent;
+  color:var(--gold);font-size:18px;cursor:pointer;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;transition:background .2s;
+}
+.count-ctrl button:hover{background:rgba(232,196,104,.12)}
+.count-ctrl .val{
+  min-width:40px;text-align:center;font-family:var(--serif);
+  font-weight:700;font-size:20px;color:var(--gold);
+}
+.ctrl-label{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.long-toggle{cursor:pointer;padding:3px 5px;user-select:none;transition:all .2s}
+.long-toggle .ctrl-label{white-space:nowrap}
+.long-toggle.on{border-color:var(--gold-dim);box-shadow:0 0 12px rgba(232,196,104,.15)}
+.long-toggle.on .ctrl-label{color:var(--gold);font-weight:500}
+#longHint{color:var(--green);font-size:11px;letter-spacing:.02em}
+.w-count.w-days{color:var(--green);border-color:rgba(78,203,113,.3);background:rgba(78,203,113,.07)}
+.is-viewer #longToggle,.is-viewer #longMinus,.is-viewer #longPlus,.is-viewer #longHint{display:none}
+
+/* SOUND + DURATION SELECTOR (admin) */
+.setting-row{
+  display:none;align-items:center;justify-content:center;gap:12px;
+  margin-bottom:18px;flex-wrap:wrap;
+}
+.is-admin .setting-row{display:flex}
+.setting-group{
+  display:flex;align-items:center;gap:6px;
+  background:var(--surface2);border:1px solid var(--line2);
+  border-radius:20px;padding:4px 10px;
+}
+.setting-group label{font-size:11px;color:var(--muted);white-space:nowrap}
+.setting-group select,
+.setting-group input[type=range]{
+  background:var(--bg);border:1px solid var(--line2);color:var(--gold);
+  border-radius:6px;padding:3px 6px;font-size:11px;
+  font-family:var(--sans);outline:none;cursor:pointer;
+}
+.setting-group select:focus,
+.setting-group input[type=range]:focus{border-color:var(--gold-dim)}
+.setting-group input[type=range]{
+  width:80px;height:4px;-webkit-appearance:none;appearance:none;
+  background:var(--bg);border:none;padding:0;
+}
+.setting-group input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--gold);cursor:pointer;border:2px solid var(--bg);
+}
+.dur-val{font-family:var(--serif);font-size:12px;font-weight:700;color:var(--gold);min-width:28px;text-align:center}
+
+/* DRAW BUTTON */
+.draw-btn{
+  position:relative;padding:14px 48px;border:none;cursor:pointer;
+  background:linear-gradient(180deg,#1a1a26,#10101a);
+  border:1px solid var(--gold-dim);border-radius:50px;
+  font-family:var(--serif);font-weight:700;font-size:16px;
+  letter-spacing:.18em;color:var(--gold);overflow:hidden;transition:all .25s;
+}
+@media(min-width:768px){.draw-btn{padding:16px 56px;font-size:18px}}
+.draw-btn::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 120%,var(--gold-glow),transparent 60%);
+  opacity:0;transition:opacity .3s;
+}
+.draw-btn:hover:not(:disabled){border-color:var(--gold);color:#fff7e0;box-shadow:0 0 30px rgba(232,196,104,.3)}
+.draw-btn:hover::before{opacity:1}
+.draw-btn:active:not(:disabled){transform:scale(.97)}
+.draw-btn:disabled{opacity:.4;cursor:not-allowed}
+.draw-btn .ring{
+  position:absolute;inset:-2px;border-radius:50px;
+  border:1px solid var(--gold);opacity:0;
+}
+.draw-btn.spinning .ring{animation:spin 1.2s linear infinite;opacity:.5}
+@keyframes spin{to{transform:rotate(360deg)}}
+.viewer-msg{
+  display:none;font-size:13px;color:var(--muted);text-align:center;
+  padding:12px;font-family:var(--serif);
+}
+.is-viewer .draw-btn,
+.is-viewer .setting-row,
+.is-viewer .count-ctrl button{display:none}
+.is-viewer .viewer-msg{display:block}
+.is-viewer .count-ctrl .val{border:1px solid var(--line2);border-radius:20px;padding:4px 12px}
+
+/* === RIGHT: HISTORY === */
+.history-list{
+  display:flex;flex-direction:column;gap:8px;
+  max-height:520px;overflow-y:auto;padding-right:3px;
+}
+@media(min-width:768px){.history-list{max-height:560px}}
+.history-list::-webkit-scrollbar{width:4px}
+.history-list::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.hist-item{
+  background:var(--surface2);border:1px solid var(--line2);
+  border-radius:10px;padding:10px 12px;animation:slidein .35s ease both;
+}
+@keyframes slidein{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+.hist-time{font-size:10px;color:var(--muted2);font-family:var(--display);letter-spacing:.08em;margin-bottom:5px}
+.hist-names{display:flex;flex-wrap:wrap;gap:5px}
+.hist-name{
+  font-family:var(--serif);font-weight:500;font-size:13px;color:var(--text);
+  background:rgba(232,196,104,.07);border:1px solid var(--line);
+  border-radius:6px;padding:2px 7px;
+}
+.hist-name .cnt{color:var(--gold);font-weight:700;font-size:11px;margin-left:3px}
+.hist-empty{text-align:center;color:var(--muted2);font-size:13px;padding:28px 0;font-family:var(--serif)}
+
+/* === TOAST === */
+.toast{
+  position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-80px);
+  background:#1a1a26;border:1px solid var(--gold-dim);
+  color:var(--text);padding:10px 22px;border-radius:30px;
+  font-size:13px;z-index:1000;transition:transform .4s cubic-bezier(.2,1.2,.4,1);
+  box-shadow:0 10px 40px rgba(0,0,0,.5);pointer-events:none;
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.err{border-color:var(--red);color:#ffb8c0}
+
+/* === RESPONSIVE === */
+@media(max-width:899px){
+  .grid{grid-template-columns:1fr}
+  .stage{min-height:auto}
+  .slot{height:110px;min-width:90px}
+  .reel-item{height:110px}
+  header.top{flex-direction:column;align-items:flex-start;gap:8px}
+  .top-meta{text-align:left}
+}
+@media(max-width:480px){
+  .app{padding:14px 12px 36px}
+  .slot{height:100px;min-width:80px;flex:1 1 80px}
+  .reel-item{height:100px;font-size:18px!important}
+  .draw-btn{padding:12px 36px;font-size:15px;letter-spacing:.12em}
+}
+
+.foot-note{
+  text-align:center;margin-top:28px;font-size:10px;color:var(--muted2);
+  letter-spacing:.1em;font-family:var(--display);
+}
+</style>
+<body>
+<div class="app is-admin" id="app">
+  <header class="top">
+    <div class="brand">
+      <h1>点名器</h1>
+      <div class="sub">Roll Call · Weighted Draw</div>
+    </div>
+    <div class="top-right">
+      <span class="role-badge admin" id="roleBadge">ADMIN</span>
+      <div class="top-meta">
+        <span class="conn-dot off" id="connDot"></span>
+        共 <b id="metaCount">0</b> 人 · 累计 <b id="metaDrawn">0</b> 人次
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <aside class="panel admin-only">
+      <div class="tabs" id="leftTabs">
+        <button class="tab on" data-tab="names">名单</button>
+        <button class="tab" data-tab="weights">权重</button>
+      </div>
+      <div class="tab-panel on" id="panelNames">
+        <div class="import-area">
+          <textarea class="names" id="namesInput" placeholder="粘贴名单（换行/逗号/顿号/空格分隔）"></textarea>
+          <div class="file-row">
+            <label class="file-btn">导入文件 (.txt/.csv)<input type="file" id="fileInput" accept=".txt,.csv,text/plain,text/csv"></label>
+          </div>
+          <div class="opt-row">
+            <label class="opt on" id="optDedup"><input type="checkbox" id="dedupChk" checked="">自动去重</label>
+            <label class="opt" id="optExclude"><input type="checkbox" id="excludeChk">本轮不重复</label>
+          </div>
+          <div class="name-stats"><span>已解析</span><span class="ct" id="parsedCount">0</span></div>
+          <button class="ghost-btn danger" id="clearNames" style="align-self:flex-start;margin-top:4px">清空名单</button>
+        </div>
+      </div>
+      <div class="tab-panel" id="panelWeights">
+        <div class="w-legend">
+          最终权重 = <b>基础100</b> + 调整值（−100 ~ +100，范围 0~200）<br>
+          当天抽中 <b>×0.5</b><span class="sep">·</span>默认 3 天后自动恢复（天数可调）
+        </div>
+        <div class="weight-list" id="weightList"><div class="hist-empty">导入名单后可调权重</div></div>
+        <div class="weight-actions">
+          <button class="ghost-btn" id="resetWeights">重置调整值</button>
+          <button class="ghost-btn" id="decayWeights">恢复衰减</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER -->
+    <section class="stage">
+      <div class="stage-label">The Draw</div>
+      <div class="stage-hint" id="stageHint">设定人数后点击下方按钮开始抽取 · 权重越高越易被抽中</div>
+      <div class="slots" id="slots"><div class="slot empty"><div class="reel" style="transform: translateY(-50%);"><div class="reel-item">—</div></div><div class="slot-mask"></div></div><div class="slot empty"><div class="reel" style="transform: translateY(-50%);"><div class="reel-item">—</div></div><div class="slot-mask"></div></div><div class="slot empty"><div class="reel" style="transform: translateY(-50%);"><div class="reel-item">—</div></div><div class="slot-mask"></div></div></div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">抽取人数</span>
+        <div class="count-ctrl">
+          <button id="minusBtn" class="admin-only" aria-label="减少">−</button>
+          <span class="val" id="pickVal">3</span>
+          <button id="plusBtn" class="admin-only" aria-label="增加">+</button>
+        </div>
+        <div class="count-ctrl long-toggle" id="longToggle" role="button" tabindex="0" title="只从超过阈值天数未抽中（含从未抽中）的人里抽取">
+          <span class="ctrl-label">只抽久未抽中</span>
+        </div>
+        <span class="ctrl-label">≥</span>
+        <div class="count-ctrl">
+          <button id="longMinus" class="admin-only" aria-label="减少阈值">−</button>
+          <span class="val" id="longVal">7</span>
+          <button id="longPlus" class="admin-only" aria-label="增加阈值">+</button>
+        </div>
+        <span class="ctrl-label">天未抽中</span>
+        <span class="ctrl-label" id="longHint"></span>
+      </div>
+      <div class="setting-row">
+        <div class="setting-group">
+          <label>音效</label>
+          <select id="soundSel">
+            <option value="drum">鼓点</option>
+            <option value="pulse">脉冲</option>
+            <option value="wheel">转盘</option>
+            <option value="heartbeat">心跳</option>
+            <option value="none">静音</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label>时长</label>
+          <input type="range" id="durSlider" min="1" max="8" step="0.5" value="3">
+          <span class="dur-val" id="durVal">3s</span>
+        </div>
+        <div class="setting-group">
+          <label>当天衰减</label>
+          <select id="decaySel">
+            <option value="0.7">×0.7</option>
+            <option value="0.5" selected="">×0.5</option>
+            <option value="0.3">×0.3</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label>恢复天数</label>
+          <select id="recoverSel">
+            <option value="1">1 天</option>
+            <option value="2">2 天</option>
+            <option value="3" selected="">3 天</option>
+            <option value="5">5 天</option>
+            <option value="7">7 天</option>
+            <option value="10">10 天</option>
+          </select>
+        </div>
+      </div>
+      <button class="draw-btn" id="drawBtn"><span class="ring"></span><span class="txt">开 始 抽 取</span></button>
+      <div class="viewer-msg">等待管理员操作...</div>
+    </section>
+
+    <!-- RIGHT -->
+    <aside class="panel">
+      <div class="panel-title">
+        <h2>抽取记录</h2>
+        <button class="ghost-btn danger admin-only" id="clearHist">清空列表</button>
+      </div>
+      <div class="history-list" id="histList"><div class="hist-empty">暂无记录</div></div>
+    </aside>
+  </div>
+  <div class="foot-note">WEIGHTED RANDOM · SINGLE FILE · ZERO BUILD</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const KEY='rolldraw_v3';
+
+/* ===== 权重常量 ===== */
+const BASE_WEIGHT=100;   // 基础权重
+const MIN_ADJ=-100;      // 调整值下限
+const MAX_ADJ=100;       // 调整值上限
+const MIN_FINAL=0;       // 最终权重下限
+const MAX_FINAL=200;     // 最终权重上限
+const ADJ_STEP=5;        // 调整步进
+const RECOVER_DAYS=3;    // 衰减恢复默认天数（可在设置中调整）
+
+const state={
+  names:['张三','李四','王五','赵六','孙七','周八','吴九','郑十'],pickCount:3,dedup:true,exclude:false,
+  history:[],drawnSet:[],weights:{},   // weights 存的是调整值 adj
+  pickCounts:{},lastPicks:{},          // 累计次数 / 上次抽中日期
+  sound:'drum',duration:3,decay:0.5,
+  decayPaused:false,                     // 暂停衰减开关（代替清空 lastPicks）
+  recoverDays:RECOVER_DAYS,            // 抽中后权重恢复天数（可配置）
+  longMode:false,longDays:7,           // 只抽久未抽中模式 / 阈值天数
+  role:'admin',wsConnected:false
+};
+
+let ws=null;
+let audioCtx=null;
+let soundTimer=null;
+let soundOscs=[];
+let isDrawing=false;
+
+// ===== AUDIO ENGINE (Web Audio API) =====
+function ensureAudio(){
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+function stopSound(){
+  clearInterval(soundTimer);soundTimer=null;
+  soundOscs.forEach(o=>{try{o.stop()}catch(e){}});soundOscs=[];
+}
+function playTick(ac,type,t){
+  if(type==='none')return;
+  const o=ac.createOscillator();
+  const g=ac.createGain();
+  o.connect(g);g.connect(ac.destination);
+  const now=ac.currentTime;
+  if(type==='drum'){
+    o.type='sine';
+    o.frequency.setValueAtTime(150+Math.random()*100,now);
+    o.frequency.exponentialRampToValueAtTime(40,now+0.12);
+    g.gain.setValueAtTime(0.5,now);
+    g.gain.exponentialRampToValueAtTime(0.001,now+0.15);
+    o.start(now);o.stop(now+0.15);
+  }else if(type==='pulse'){
+    o.type='square';
+    o.frequency.setValueAtTime(800+Math.random()*600,now);
+    g.gain.setValueAtTime(0.15,now);
+    g.gain.exponentialRampToValueAtTime(0.001,now+0.06);
+    o.start(now);o.stop(now+0.06);
+  }else if(type==='wheel'){
+    o.type='sawtooth';
+    const base=300+Math.sin(t*0.1)*200;
+    o.frequency.setValueAtTime(base+Math.random()*200,now);
+    g.gain.setValueAtTime(0.1,now);
+    g.gain.exponentialRampToValueAtTime(0.001,now+0.08);
+    o.start(now);o.stop(now+0.08);
+  }else if(type==='heartbeat'){
+    const beat=Math.floor(t*2)%2;
+    o.type='sine';
+    o.frequency.setValueAtTime(beat===0?60:90,now);
+    g.gain.setValueAtTime(beat===0?0.6:0.4,now);
+    g.gain.exponentialRampToValueAtTime(0.001,now+0.2);
+    o.start(now);o.stop(now+0.2);
+  }
+  soundOscs.push(o);
+  o.onended=()=>{const i=soundOscs.indexOf(o);if(i>-1)soundOscs.splice(i,1);};
+}
+function playReveal(){
+  const ac=ensureAudio();
+  [523.25,659.25,783.99].forEach((f,i)=>{
+    const o=ac.createOscillator();const g=ac.createGain();
+    o.connect(g);g.connect(ac.destination);o.type='sine';
+    const t=ac.currentTime+i*0.1;
+    o.frequency.setValueAtTime(f,t);
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(0.3,t+0.05);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.4);
+    o.start(t);o.stop(t+0.4);
+  });
+}
+function startSoundLoop(type,durMs){
+  stopSound();
+  if(type==='none')return;
+  const ac=ensureAudio();
+  let tick=0;
+  const interval=type==='heartbeat'?250:type==='drum'?120:type==='pulse'?80:60;
+  soundTimer=setInterval(()=>{playTick(ac,type,tick);tick++;},interval);
+  setTimeout(stopSound,durMs+500);
+}
+
+// ===== PERSISTENCE =====
+function load(){
+  try{
+    const d=JSON.parse(localStorage.getItem(KEY)||'{}');
+    if(d.names)state.names=d.names;
+    if(d.pickCount)state.pickCount=d.pickCount;
+    if(typeof d.dedup==='boolean')state.dedup=d.dedup;
+    if(typeof d.exclude==='boolean')state.exclude=d.exclude;
+    if(d.history)state.history=d.history;
+    if(d.weights)state.weights=d.weights;
+    if(d.pickCounts)state.pickCounts=d.pickCounts;
+    if(d.lastPicks)state.lastPicks=d.lastPicks;
+    if(d.sound)state.sound=d.sound;
+    if(d.duration)state.duration=d.duration;
+    if(d.decay)state.decay=d.decay;
+    if(d.recoverDays)state.recoverDays=d.recoverDays;
+    if(typeof d.longMode==='boolean')state.longMode=d.longMode;
+    if(d.longDays)state.longDays=d.longDays;
+    if(typeof d.decayPaused==='boolean')state.decayPaused=d.decayPaused;
+    // 兼容旧数据：被抽次数还在但“上次抽中日期”缺失（旧版“恢复衰减”清空过），
+    // 从抽取记录(history，最新在前)回溯重建最近一次抽中日期
+    if(d.history){
+      const lp=state.lastPicks||{};
+      d.history.forEach(h=>{
+        const date=(h.t||'').slice(0,10);
+        if(!date)return;
+        h.names.forEach(n=>{if(!(n in lp))lp[n]=date;});
+      });
+      state.lastPicks=lp;
+    }
+    // 迁移旧版(v2)权重：旧版存的是实际权重值(~1.0)，新版存调整值
+    if(!d.version||d.version<3){
+      state.weights={};
+      state.names.forEach(n=>{state.weights[n]=0;});
+    }
+  }catch(e){}
+}
+function save(){
+  localStorage.setItem(KEY,JSON.stringify({
+    version:3,
+    names:state.names,pickCount:state.pickCount,
+    dedup:state.dedup,exclude:state.exclude,
+    history:state.history,weights:state.weights,
+    pickCounts:state.pickCounts,lastPicks:state.lastPicks,
+    sound:state.sound,duration:state.duration,decay:state.decay,
+    recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,
+    decayPaused:state.decayPaused
+  }));
+}
+
+// ===== WEBSOCKET =====
+let wsEverOpened=false;
+function connectWS(){
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  const role=new URLSearchParams(location.search).get('role');
+  state.role=role==='admin'?'admin':'viewer';
+  const url=proto+'//'+location.host+'/ws'+(role==='admin'?'?role=admin':'');
+  try{ws=new WebSocket(url);}catch(e){fallbackAdmin();return;}
+  ws.onopen=()=>{wsEverOpened=true;state.wsConnected=true;applyRole();wsSend({type:'state',data:getFullState()});};
+  ws.onclose=()=>{state.wsConnected=false;if(!wsEverOpened){fallbackAdmin();return;}applyRole();setTimeout(connectWS,3000);};
+  ws.onerror=()=>{};
+  ws.onmessage=e=>{try{const msg=JSON.parse(e.data);handleWS(msg);}catch(ex){}};
+}
+function fallbackAdmin(){state.role='admin';applyRole();}
+function wsSend(msg){if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));}
+function getFullState(){
+  return{names:state.names,pickCount:state.pickCount,weights:state.weights,
+    sound:state.sound,duration:state.duration,decay:state.decay,history:state.history,
+    pickCounts:state.pickCounts,lastPicks:state.lastPicks,
+    recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,
+    decayPaused:state.decayPaused};
+}
+function handleWS(msg){
+  const d=msg.data;
+  if(msg.type==='state'){
+    state.names=d.names||[];state.pickCount=d.pickCount||3;
+    state.weights=d.weights||{};state.sound=d.sound||'drum';
+    state.duration=d.duration||3;state.decay=d.decay||0.5;
+    state.history=d.history||[];
+    state.pickCounts=d.pickCounts||{};state.lastPicks=d.lastPicks||{};
+    if(d.recoverDays)state.recoverDays=d.recoverDays;
+    if(typeof d.longMode==='boolean')state.longMode=d.longMode;
+    if(d.longDays)state.longDays=d.longDays;
+    if(typeof d.decayPaused==='boolean')state.decayPaused=d.decayPaused;
+    rebuildUI();
+  }else if(msg.type==='draw'){
+    runDrawAnimation(d.winners,d.timestamp);
+  }else if(msg.type==='names'){
+    state.names=d;$('#namesInput').value=d.join('\n');
+    syncNamesFromInput(true);
+  }else if(msg.type==='weights'){
+    state.weights=d;renderWeights();
+  }else if(msg.type==='config'){
+    state.pickCount=d.pickCount||state.pickCount;
+    state.sound=d.sound||state.sound;
+    state.duration=d.duration||state.duration;
+    state.decay=d.decay||state.decay;
+    if(d.recoverDays)state.recoverDays=d.recoverDays;
+    if(typeof d.longMode==='boolean')state.longMode=d.longMode;
+    if(d.longDays)state.longDays=d.longDays;
+    if(typeof d.decayPaused==='boolean')state.decayPaused=d.decayPaused;
+    syncConfigUI();
+  }else if(msg.type==='history'){
+    state.history=d;renderHistory();renderMeta();
+  }else if(msg.type==='stats'){
+    state.pickCounts=d.pickCounts||{};state.lastPicks=d.lastPicks||{};
+    renderHistory();renderWeights();renderMeta();
+  }
+}
+function applyRole(){
+  const app=$('#app');
+  app.classList.remove('is-admin','is-viewer');
+  app.classList.add(state.role==='admin'?'is-admin':'is-viewer');
+  const badge=$('#roleBadge');
+  const dot=$('#connDot');
+  if(state.role==='admin'){
+    badge.className='role-badge admin';badge.textContent='ADMIN';
+  }else{
+    badge.className='role-badge viewer';badge.textContent='VIEWER';
+  }
+  dot.className='conn-dot '+(state.wsConnected?'on':'off');
+}
+function broadcast(type,data){
+  if(state.role!=='admin')return;
+  wsSend({type,data});
+}
+
+// ===== PARSE NAMES =====
+function parseNames(raw){
+  if(!raw)return[];
+  const parts=raw.split(/[\n,，;；、\s]+/).map(s=>s.trim()).filter(Boolean);
+  if(!state.dedup)return parts;
+  const seen=new Set();const arr=[];
+  for(const n of parts){if(!seen.has(n)){seen.add(n);arr.push(n);}}
+  return arr;
+}
+
+// ===== TOAST =====
+let toastT;
+function toast(msg,isErr){
+  const t=$('#toast');t.textContent=msg;
+  t.classList.toggle('err',!!isErr);t.classList.add('show');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+// ===== DATE HELPERS =====
+function p2(n){return n<10?'0'+n:''+n}
+function todayStr(){
+  const d=new Date();
+  return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+}
+function daysBetween(a,b){
+  const da=new Date(a+'T00:00:00');
+  const db=new Date(b+'T00:00:00');
+  return Math.round((db-da)/86400000);
+}
+
+// ===== 权重计算 =====
+function getAdj(name){
+  const v=state.weights[name];
+  return typeof v==='number'?v:0;
+}
+function getFinalWeight(name){
+  return Math.max(MIN_FINAL,Math.min(MAX_FINAL,BASE_WEIGHT+getAdj(name)));
+}
+// 当天抽中 ×decay，state.recoverDays 天内渐进恢复至 1.0；暂停衰减时恒为 1.0
+function getDecayFactor(name){
+  if(state.decayPaused) return 1.0;
+  const last=state.lastPicks[name];
+  if(!last) return 1.0;
+  const days=daysBetween(last,todayStr());
+  if(days<=0) return state.decay;
+  if(days>=state.recoverDays) return 1.0;
+  return state.decay+(1-state.decay)*(days/state.recoverDays);
+}
+function getEffectiveWeight(name){
+  return getFinalWeight(name)*getDecayFactor(name);
+}
+function setAdj(name,v){
+  state.weights[name]=Math.max(MIN_ADJ,Math.min(MAX_ADJ,v));
+  save();renderWeights();broadcast('weights',state.weights);
+}
+
+// ===== WEIGHTED RANDOM =====
+function weightedPick(available){
+  const items=available.map(n=>({name:n,w:getEffectiveWeight(n)}));
+  const total=items.reduce((s,x)=>s+x.w,0);
+  if(total<=0){ // 全部权重为0，退化为均等随机
+    return available[Math.floor(Math.random()*available.length)];
+  }
+  let r=Math.random()*total;
+  for(const x of items){r-=x.w;if(r<=0)return x.name;}
+  return items[items.length-1].name;
+}
+function pickWinners(available,n){
+  const winners=[];const tmp=available.slice();
+  for(let i=0;i<n;i++){
+    const name=weightedPick(tmp);
+    winners.push(name);
+    tmp.splice(tmp.indexOf(name),1);
+  }
+  return winners;
+}
+
+// ===== RENDER SLOTS =====
+function randPick(arr){return arr[Math.floor(Math.random()*arr.length)]||'—';}
+function renderSlotsIdle(){
+  const wrap=$('#slots');wrap.innerHTML='';
+  for(let i=0;i<state.pickCount;i++){
+    const slot=document.createElement('div');slot.className='slot';
+    if(!state.names.length)slot.classList.add('empty');
+    const reel=document.createElement('div');reel.className='reel';
+    const pool=state.names.length?state.names:['—'];
+    const it=document.createElement('div');it.className='reel-item';
+    it.textContent=state.names.length?randPick(pool):'—';
+    reel.appendChild(it);
+    reel.style.transform='translateY(-50%)';
+    slot.appendChild(reel);
+    const mask=document.createElement('div');mask.className='slot-mask';
+    slot.appendChild(mask);wrap.appendChild(slot);
+  }
+}
+
+// ===== DRAW =====
+function draw(){
+  if(state.role!=='admin'||isDrawing)return;
+  const pool=state.names.slice();
+  if(!pool.length){toast('请先导入名单',true);return;}
+  let available=pool;
+  // 只抽久未抽中：仅从超过 longDays 天未抽中（含从未抽中）的人里抽取
+  if(state.longMode){
+    const cand=pool.filter(n=>{
+      const last=state.lastPicks[n];
+      if(!last)return true;
+      return daysBetween(last,todayStr())>=state.longDays;
+    });
+    if(cand.length===0){toast('没有超过 '+state.longDays+' 天未抽中的人',true);return;}
+    if(cand.length<state.pickCount){toast('符合「≥'+state.longDays+' 天未抽中」的只有 '+cand.length+' 人，少于抽取人数',true);return;}
+    available=cand;
+  }
+  if(state.exclude){
+    available=pool.filter(n=>!state.drawnSet.includes(n));
+    if(available.length<state.pickCount){
+      toast('可抽人数不足，已自动重置本轮',true);state.drawnSet=[];available=pool;
+    }
+    if(available.length<state.pickCount){toast('名单人数少于抽取人数',true);return;}
+  }else if(pool.length<state.pickCount){toast('名单人数少于抽取人数',true);return;}
+  const winners=pickWinners(available,state.pickCount);
+  const now=new Date();
+  const ts=now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate())+' '+p2(now.getHours())+':'+p2(now.getMinutes())+':'+p2(now.getSeconds());
+  broadcast('draw',{winners,timestamp:ts});
+  runDrawAnimation(winners,ts);
+}
+
+function runDrawAnimation(winners,timestamp){
+  if(isDrawing)return;isDrawing=true;
+  const pool=state.names;
+  const n=winners.length;
+  const btn=$('#drawBtn');
+  btn.disabled=true;btn.classList.add('spinning');btn.querySelector('.txt').textContent='抽 取 中';
+  $('#stageHint').textContent='';
+  const durMs=state.duration*1000;
+  const baseDur=durMs;
+  const stagger=Math.min(350,durMs/n);
+  startSoundLoop(state.sound,durMs+stagger*(n-1)+400);
+  const wrap=$('#slots');wrap.innerHTML='';
+  const reels=[];
+  for(let i=0;i<n;i++){
+    const slot=document.createElement('div');slot.className='slot';
+    const reel=document.createElement('div');reel.className='reel';
+    const padTop=6;
+    const strip=[];
+    for(let k=0;k<padTop;k++)strip.push(randPick(pool));
+    strip.push(winners[i]);
+    for(let k=0;k<4;k++)strip.push(randPick(pool));
+    strip.forEach((nm,idx)=>{
+      const it=document.createElement('div');
+      it.className='reel-item'+(idx===padTop?' win':'');
+      it.textContent=nm;reel.appendChild(it);
+    });
+    reel.style.transition='none';
+    reel.style.transform='translateY(-75px)';
+    slot.appendChild(reel);
+    const mask=document.createElement('div');mask.className='slot-mask';
+    slot.appendChild(mask);wrap.appendChild(slot);
+    reels.push({reel,winnerIdx:padTop,slot});
+  }
+  let done=0;
+  reels.forEach((r,i)=>{
+    const dur=baseDur+i*Math.min(200,durMs*0.1);
+    const delay=i*stagger;
+    r.reel.style.transform='translateY(-75px)';
+    void r.reel.offsetWidth;
+    setTimeout(()=>{
+      r.reel.style.transition='transform '+dur+'ms cubic-bezier(.1,.62,.16,1)';
+      r.reel.style.transform='translateY('+(-75 - r.winnerIdx*150)+'px)';
+    },30);
+    setTimeout(()=>{
+      r.slot.classList.add('lit');done++;
+      if(done===n)finishDraw(winners,timestamp);
+    },dur+delay+50);
+  });
+  window._animReels=reels;
+}
+
+function finishDraw(winners,timestamp){
+  stopSound();playReveal();
+  // 兜底：用实际DOM尺寸把中奖名字强制对齐到槽中心
+  if(window._animReels){
+    window._animReels.forEach(r=>{
+      const wEl=r.reel.children[r.winnerIdx];
+      if(!wEl)return;
+      const y=-(wEl.offsetTop + wEl.offsetHeight/2);
+      r.reel.style.transition='transform .3s ease';
+      r.reel.style.transform='translateY('+y+'px)';
+    });
+  }
+  isDrawing=false;
+  const btn=$('#drawBtn');
+  btn.disabled=false;btn.classList.remove('spinning');
+  btn.querySelector('.txt').textContent='开 始 抽 取';
+  if(state.role==='admin'){
+    if(state.exclude)state.drawnSet.push(...winners);
+    // 记录累计次数 + 上次抽中日期（用于自动衰减）
+    const today=todayStr();
+    winners.forEach(n=>{
+      state.pickCounts[n]=(state.pickCounts[n]||0)+1;
+      state.lastPicks[n]=today;
+    });
+    state.history.unshift({t:timestamp||fmtNow(),names:winners.slice()});
+    if(state.history.length>100)state.history.length=100;
+    save();renderHistory();renderMeta();renderWeights();
+    broadcast('history',state.history);
+    broadcast('stats',{pickCounts:state.pickCounts,lastPicks:state.lastPicks});
+  }else{
+    renderHistory();renderMeta();
+  }
+  // 舞台显示每人累计次数
+  $('#stageHint').innerHTML=winners.map(n=>{
+    const c=state.pickCounts[n]||0;
+    return n+' <b>累计'+c+'次</b>';
+  }).join('&nbsp;&nbsp;&nbsp;');
+  toast('抽取完成');
+  updateLongHint();
+}
+function fmtNow(){
+  const d=new Date();
+  return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())+' '+p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds());
+}
+
+// ===== HISTORY =====
+function renderHistory(){
+  const list=$('#histList');
+  if(!state.history.length){list.innerHTML='<div class="hist-empty">暂无记录</div>';return;}
+  list.innerHTML='';
+  state.history.forEach(h=>{
+    const it=document.createElement('div');it.className='hist-item';
+    const t=document.createElement('div');t.className='hist-time';t.textContent=h.t;
+    const ns=document.createElement('div');ns.className='hist-names';
+    h.names.forEach(n=>{
+      const c=document.createElement('span');c.className='hist-name';
+      const cnt=state.pickCounts[n]||0;
+      c.textContent=n;
+      if(cnt>0){ // 没被抽过不显示0次
+        const s=document.createElement('span');s.className='cnt';s.textContent='·'+cnt;
+        c.appendChild(s);
+      }
+      ns.appendChild(c);
+    });
+    it.appendChild(t);it.appendChild(ns);list.appendChild(it);
+  });
+}
+
+// ===== WEIGHTS =====
+function renderWeights(){
+  const list=$('#weightList');
+  if(!state.names.length){list.innerHTML='<div class="hist-empty">导入名单后可调权重</div>';return;}
+  list.innerHTML='';
+  state.names.forEach(n=>{
+    const adj=getAdj(n);
+    const final=getFinalWeight(n);
+    const eff=getEffectiveWeight(n);
+    const factor=getDecayFactor(n);
+    const cnt=state.pickCounts[n]||0;
+    const card=document.createElement('div');
+    card.className='w-card'+(factor<1?' cool':'');
+
+    const head=document.createElement('div');head.className='w-head';
+    const nm=document.createElement('span');nm.className='w-name';nm.textContent=n;
+    head.appendChild(nm);
+    if(cnt>0){ // 没被抽过不显示0次
+      const cc=document.createElement('span');cc.className='w-count';cc.textContent='被抽 '+cnt+' 次';
+      head.appendChild(cc);
+    }
+    // 显示距上次抽中的天数 / 从未抽中：以“是否有抽取记录”为准，不依赖日期字段
+    const last=state.lastPicks[n];
+    const dSince=last?daysBetween(last,todayStr()):null;
+    const hasRecord=(cnt>0)||(dSince!==null);
+    if(!hasRecord){
+      const tag=document.createElement('span');tag.className='w-count w-days';tag.textContent='从未抽中';
+      head.appendChild(tag);
+    }else if(dSince===null){
+      // 有抽取记录但日期缺失（历史记录也被清空过），无法推算天数
+      const tag=document.createElement('span');tag.className='w-count w-days';tag.textContent='已抽过';
+      head.appendChild(tag);
+    }else{
+      const tag=document.createElement('span');tag.className='w-count w-days';tag.textContent='距上次 '+dSince+' 天';
+      head.appendChild(tag);
+    }
+
+    const body=document.createElement('div');body.className='w-body';
+    const base=document.createElement('span');base.className='w-base';base.textContent='基础 '+BASE_WEIGHT;
+    const ctrl=document.createElement('div');ctrl.className='w-ctrl';
+    const minus=document.createElement('button');minus.textContent='−';
+    const adjSpan=document.createElement('span');adjSpan.className='w-adj'+(adj<0?' neg':'');
+    adjSpan.textContent=(adj>0?'+':'')+adj;
+    const plus=document.createElement('button');plus.textContent='+';
+    minus.onclick=()=>setAdj(n,getAdj(n)-ADJ_STEP);
+    plus.onclick=()=>setAdj(n,getAdj(n)+ADJ_STEP);
+    ctrl.appendChild(minus);ctrl.appendChild(adjSpan);ctrl.appendChild(plus);
+    const fin=document.createElement('span');fin.className='w-final';fin.textContent=final;
+    body.appendChild(base);body.appendChild(ctrl);body.appendChild(fin);
+
+    const bw=document.createElement('div');bw.className='w-bar-wrap';
+    const bar=document.createElement('div');bar.className='w-bar'+(final<=0?' zero':'');
+    bar.style.width=(final/MAX_FINAL*100)+'%';
+    bw.appendChild(bar);
+
+    const effEl=document.createElement('div');effEl.className='w-eff'+(factor>=1?' hide':'');
+    if(factor<1){
+      const days=state.lastPicks[n]?daysBetween(state.lastPicks[n],todayStr()):0;
+      const label=days<=0?'今日抽中':(days===1?'昨日抽中':'恢复中');
+      effEl.textContent='有效 '+Math.round(eff)+' · '+label+' ×'+factor.toFixed(2);
+    }
+
+    card.appendChild(head);card.appendChild(body);card.appendChild(bw);card.appendChild(effEl);
+    list.appendChild(card);
+  });
+  updateLongHint();
+}
+
+// ===== META =====
+function renderMeta(){
+  $('#metaCount').textContent=state.names.length;
+  const total=Object.values(state.pickCounts).reduce((a,b)=>a+(b||0),0);
+  $('#metaDrawn').textContent=total;
+}
+function longCandidates(){
+  return state.names.filter(n=>{
+    const last=state.lastPicks[n];
+    if(!last)return true;
+    return daysBetween(last,todayStr())>=state.longDays;
+  });
+}
+function updateLongHint(){
+  const hint=$('#longHint');
+  if(!hint)return;
+  hint.textContent=state.longMode?('只抽 ≥'+state.longDays+' 天未抽中 · 当前符合 '+longCandidates().length+' 人'):'';
+}
+function syncConfigUI(){
+  $('#pickVal').textContent=state.pickCount;
+  $('#soundSel').value=state.sound;
+  $('#durSlider').value=state.duration;
+  $('#durVal').textContent=state.duration+'s';
+  $('#decaySel').value=String(state.decay);
+  $('#recoverSel').value=String(state.recoverDays);
+  $('#longVal').textContent=state.longDays;
+  $('#longToggle').classList.toggle('on',state.longMode);
+  $('#decayWeights').textContent=state.decayPaused?'恢复衰减':'暂停衰减';
+  updateLongHint();
+}
+
+// ===== NAMES INPUT =====
+function syncNamesFromInput(skipBroadcast){
+  const raw=$('#namesInput').value;
+  state.names=parseNames(raw);
+  // 新名字初始化调整值为0
+  state.names.forEach(n=>{if(!(n in state.weights))state.weights[n]=0;});
+  $('#parsedCount').textContent=state.names.length;
+  renderMeta();save();renderSlotsIdle();renderWeights();
+  if(!skipBroadcast)broadcast('names',state.names);
+}
+
+function rebuildUI(){
+  $('#namesInput').value=state.names.join('\n');
+  $('#parsedCount').textContent=state.names.length;
+  syncConfigUI();renderSlotsIdle();renderHistory();renderMeta();renderWeights();
+}
+
+// ===== TABS =====
+function initTabs(){
+  const tabs=$('#leftTabs');
+  tabs.querySelectorAll('.tab').forEach(tab=>{
+    tab.onclick=()=>{
+      tabs.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+      tabs.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('on'));
+      tab.classList.add('on');
+      document.getElementById('panel'+tab.dataset.tab.charAt(0).toUpperCase()+tab.dataset.tab.slice(1)).classList.add('on');
+    };
+  });
+}
+
+// ===== INIT =====
+function init(){
+  load();
+  if(!location.host||location.protocol==='file:'){state.role='admin';applyRole();}
+  else{connectWS();}
+
+  initTabs();
+  $('#namesInput').value=state.names.join('\n');
+  syncConfigUI();
+  $('#dedupChk').checked=state.dedup;
+  $('#excludeChk').checked=state.exclude;
+  $('#optDedup').classList.toggle('on',state.dedup);
+  $('#optExclude').classList.toggle('on',state.exclude);
+
+  $('#excludeChk').onchange=e=>{state.exclude=e.target.checked;state.drawnSet=[];save();$('#optExclude').classList.toggle('on',state.exclude);};
+  $('#dedupChk').onchange=e=>{state.dedup=e.target.checked;$('#optDedup').classList.toggle('on',state.dedup);syncNamesFromInput();};
+  $('#namesInput').oninput=()=>syncNamesFromInput();
+  $('#fileInput').onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=ev=>{$('#namesInput').value=ev.target.result;syncNamesFromInput();toast('已导入 '+state.names.length+' 人');};
+    r.onerror=()=>toast('读取失败',true);
+    r.readAsText(f,'UTF-8');e.target.value='';
+  };
+  $('#clearNames').onclick=()=>{$('#namesInput').value='';state.names=[];state.drawnSet=[];syncNamesFromInput();toast('名单已清空');};
+
+  $('#minusBtn').onclick=()=>{if(state.pickCount>1){state.pickCount--;$('#pickVal').textContent=state.pickCount;save();renderSlotsIdle();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
+  $('#plusBtn').onclick=()=>{if(state.pickCount<12){state.pickCount++;$('#pickVal').textContent=state.pickCount;save();renderSlotsIdle();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
+
+  $('#soundSel').onchange=e=>{state.sound=e.target.value;save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});};
+  $('#durSlider').oninput=e=>{state.duration=parseFloat(e.target.value);$('#durVal').textContent=state.duration+'s';save();};
+  $('#durSlider').onchange=e=>{broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});};
+  $('#decaySel').onchange=e=>{state.decay=parseFloat(e.target.value);save();renderWeights();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});};
+  $('#recoverSel').onchange=e=>{state.recoverDays=parseInt(e.target.value,10);save();renderWeights();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});};
+
+  // 只抽久未抽中模式
+  $('#longToggle').onclick=()=>{
+    state.longMode=!state.longMode;
+    $('#longToggle').classList.toggle('on',state.longMode);
+    updateLongHint();save();
+    broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});
+  };
+  $('#longMinus').onclick=()=>{if(state.longDays>1){state.longDays--;$('#longVal').textContent=state.longDays;updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
+  $('#longPlus').onclick=()=>{if(state.longDays<30){state.longDays++;$('#longVal').textContent=state.longDays;updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
+
+  $('#drawBtn').onclick=draw;
+
+  // 清空仅清除记录列表，被抽次数(累计)永久保留
+  $('#clearHist').onclick=()=>{
+    if(!state.history.length){toast('暂无记录',true);return;}
+    state.history=[];state.drawnSet=[];
+    save();renderHistory();renderMeta();broadcast('history',state.history);
+    toast('记录列表已清空（被抽次数已保留）');
+  };
+
+  $('#resetWeights').onclick=()=>{
+    state.names.forEach(n=>{state.weights[n]=0;});
+    save();renderWeights();broadcast('weights',state.weights);toast('调整值已重置为 0');
+  };
+  // 暂停/恢复衰减：不再清空 lastPicks，避免“从未抽中”误显示
+  $('#decayWeights').onclick=()=>{
+    state.decayPaused=!state.decayPaused;
+    $('#decayWeights').textContent=state.decayPaused?'恢复衰减':'暂停衰减';
+    save();renderWeights();
+    broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});
+    toast(state.decayPaused?'已暂停衰减，所有人权重恢复正常':'已恢复自动衰减');
+  };
+
+  syncNamesFromInput(true);renderHistory();renderMeta();renderWeights();
+
+  document.onkeydown=e=>{
+    if(e.code==='Space'&&document.activeElement.tagName!=='TEXTAREA'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='SELECT'){
+      e.preventDefault();draw();
+    }
+  };
+}
+
+document.addEventListener('DOMContentLoaded',init);
+})();
+</script>
+
+
+</body></html>

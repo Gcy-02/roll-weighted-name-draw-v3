@@ -1,0 +1,15 @@
+# 临时文件
+*.tmp
+*.log
+*.bak
+.DS_Store
+Thumbs.db
+
+# 编辑器 / IDE 配置
+.vscode/
+.idea/
+*.swp
+*~
+
+# 本地自检产物（截图缓存目录，不提交）
+_shots/
