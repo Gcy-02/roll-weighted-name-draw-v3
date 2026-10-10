@@ -185,6 +185,7 @@ textarea.names::placeholder{color:var(--muted2)}
   font-size:10px;color:var(--gold-dim);font-family:var(--display);
   letter-spacing:.06em;background:rgba(232,196,104,.08);
   border:1px solid var(--line);border-radius:20px;padding:2px 8px;white-space:nowrap;
+  flex-shrink:0; /* 徽标不参与压缩，保证“被抽 N 次 / 距上次 N 天”完整显示 */
 }
 .w-body{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
 .w-base{white-space:nowrap;font-family:var(--display);letter-spacing:.04em}
@@ -489,7 +490,7 @@ textarea.names::placeholder{color:var(--muted2)}
       <div class="tab-panel" id="panelWeights">
         <div class="w-legend">
           最终权重 = <b>基础100</b> + 调整值（−100 ~ +100，范围 0~200）<br>
-          当天抽中 <b>×0.5</b><span class="sep">·</span>默认 3 天后自动恢复（天数可调）
+          当天抽中 <b id="legendDecay">×0.5</b><span class="sep">·</span><b id="legendRecover">3</b> 天后自动恢复（倍率与天数均可调）
         </div>
         <div class="weight-list" id="weightList"><div class="hist-empty">导入名单后可调权重</div></div>
         <div class="weight-actions">
@@ -904,10 +905,19 @@ function renderSlotsIdle(){
 // ===== DRAW =====
 function draw(){
   if(state.role!=='admin'||isDrawing)return;
-  const pool=state.names.slice();
+  let pool=state.names.slice();
   if(!pool.length){toast('请先导入名单',true);return;}
-  let available=pool;
-  // 只抽久未抽中：仅从超过 longDays 天未抽中（含从未抽中）的人里抽取
+  // 本轮不重复：先排除本轮已抽过的人
+  if(state.exclude){
+    const unDrawn=pool.filter(n=>!state.drawnSet.includes(n));
+    if(unDrawn.length<state.pickCount){
+      toast('可抽人数不足，已自动重置本轮',true);
+      state.drawnSet=[];
+    }else{
+      pool=unDrawn;
+    }
+  }
+  // 只抽久未抽中：在上一步基础上，仅从超过 longDays 天未抽中（含从未抽中）的人里抽取
   if(state.longMode){
     const cand=pool.filter(n=>{
       const last=state.lastPicks[n];
@@ -916,16 +926,10 @@ function draw(){
     });
     if(cand.length===0){toast('没有超过 '+state.longDays+' 天未抽中的人',true);return;}
     if(cand.length<state.pickCount){toast('符合「≥'+state.longDays+' 天未抽中」的只有 '+cand.length+' 人，少于抽取人数',true);return;}
-    available=cand;
+    pool=cand;
   }
-  if(state.exclude){
-    available=pool.filter(n=>!state.drawnSet.includes(n));
-    if(available.length<state.pickCount){
-      toast('可抽人数不足，已自动重置本轮',true);state.drawnSet=[];available=pool;
-    }
-    if(available.length<state.pickCount){toast('名单人数少于抽取人数',true);return;}
-  }else if(pool.length<state.pickCount){toast('名单人数少于抽取人数',true);return;}
-  const winners=pickWinners(available,state.pickCount);
+  if(pool.length<state.pickCount){toast('名单人数少于抽取人数',true);return;}
+  const winners=pickWinners(pool,state.pickCount);
   const now=new Date();
   const ts=now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate())+' '+p2(now.getHours())+':'+p2(now.getMinutes())+':'+p2(now.getSeconds());
   broadcast('draw',{winners,timestamp:ts});
@@ -1053,6 +1057,9 @@ function renderHistory(){
 
 // ===== WEIGHTS =====
 function renderWeights(){
+  // 图例同步当前衰减倍率与恢复天数
+  $('#legendDecay').textContent='×'+state.decay;
+  $('#legendRecover').textContent=state.recoverDays;
   const list=$('#weightList');
   if(!state.names.length){list.innerHTML='<div class="hist-empty">导入名单后可调权重</div>';return;}
   list.innerHTML='';
@@ -1106,12 +1113,24 @@ function renderWeights(){
     bar.style.width=(final/MAX_FINAL*100)+'%';
     bw.appendChild(bar);
 
-    const effEl=document.createElement('div');effEl.className='w-eff'+(factor>=1?' hide':'');
-    if(factor<1){
-      const days=state.lastPicks[n]?daysBetween(state.lastPicks[n],todayStr()):0;
-      const label=days<=0?'今日抽中':(days===1?'昨日抽中':'恢复中');
-      effEl.textContent='有效 '+Math.round(eff)+' · '+label+' ×'+factor.toFixed(2);
+    // 衰减状态行：只要有过抽取记录就显示明确状态（含“已暂停”“今日抽中”“恢复中”）
+    let effText='';
+    if(state.lastPicks[n]){
+      if(state.decayPaused){
+        effText='衰减已暂停 · 有效 '+Math.round(eff);
+      }else{
+        const days=daysBetween(state.lastPicks[n],todayStr());
+        if(days<=0){
+          effText='今日抽中 · 有效 '+Math.round(eff)+' · ×'+factor.toFixed(2)+'（'+state.recoverDays+' 天后恢复）';
+        }else if(days<state.recoverDays){
+          effText='恢复中 '+days+'/'+state.recoverDays+' 天 · 有效 '+Math.round(eff)+' · ×'+factor.toFixed(2);
+        }
+        // days>=recoverDays：已恢复，不显示衰减行
+      }
     }
+    const effEl=document.createElement('div');
+    effEl.className='w-eff'+(effText?'':' hide');
+    if(effText)effEl.textContent=effText;
 
     card.appendChild(head);card.appendChild(body);card.appendChild(bw);card.appendChild(effEl);
     list.appendChild(card);
@@ -1144,6 +1163,9 @@ function syncConfigUI(){
   $('#durVal').textContent=state.duration+'s';
   $('#decaySel').value=String(state.decay);
   $('#recoverSel').value=String(state.recoverDays);
+  // 权重图例同步当前倍率与恢复天数
+  $('#legendDecay').textContent='×'+state.decay;
+  $('#legendRecover').textContent=state.recoverDays;
   $('#longVal').textContent=state.longDays;
   $('#longToggle').classList.toggle('on',state.longMode);
   $('#decayWeights').textContent=state.decayPaused?'恢复衰减':'暂停衰减';
