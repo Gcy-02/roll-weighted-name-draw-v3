@@ -61,6 +61,45 @@ header.top{
 }
 .role-badge.admin{background:rgba(232,196,104,.12);border:1px solid var(--gold-dim);color:var(--gold)}
 .role-badge.viewer{background:rgba(78,203,113,.1);border:1px solid rgba(78,203,113,.3);color:var(--green)}
+.ver{
+  display:inline-block;margin-left:10px;font-family:var(--display);font-weight:500;
+  font-size:12px;letter-spacing:.06em;color:var(--muted);
+  background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:20px;padding:3px 10px;
+  vertical-align:middle;transform:translateY(-3px);
+}
+.mini-btn{
+  font-family:var(--display);font-size:11px;letter-spacing:.05em;color:var(--gold-dim);
+  background:rgba(232,196,104,.06);border:1px solid var(--gold-dim);border-radius:20px;
+  padding:4px 12px;cursor:pointer;transition:all .2s;
+}
+.mini-btn:hover{background:rgba(232,196,104,.15);color:var(--gold)}
+.health-mask{
+  position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(3px);padding:16px;
+}
+.health-panel{
+  width:min(720px,94vw);max-height:80vh;display:flex;flex-direction:column;
+  background:linear-gradient(180deg,#17130d,#14100b);border:1px solid var(--gold-dim);
+  border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden;
+}
+.hp-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid var(--line);
+  font-family:var(--serif);font-weight:700;font-size:16px;color:var(--gold);
+}
+.hp-head button{
+  background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;
+}
+.hp-head button:hover{color:var(--gold)}
+.hp-body{padding:14px 18px 18px;overflow:auto;font-size:13px}
+.hp-line{margin-bottom:8px;line-height:1.7;color:var(--text)}
+.hp-table{width:100%;border-collapse:collapse;margin-top:8px}
+.hp-table th{
+  text-align:left;font-family:var(--display);font-weight:500;font-size:11px;
+  letter-spacing:.05em;color:var(--gold-dim);padding:6px 8px;border-bottom:1px solid var(--line);
+}
+.hp-table td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text)}
+.hp-table tr:last-child td{border-bottom:none}
 .conn-dot{
   width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px;
   vertical-align:middle;
@@ -454,11 +493,12 @@ textarea.names::placeholder{color:var(--muted2)}
 <div class="app is-admin" id="app">
   <header class="top">
     <div class="brand">
-      <h1>点名器</h1>
+      <h1>点名器<span class="ver">v3.1 · 2026-10-15</span></h1>
       <div class="sub">Roll Call · Weighted Draw</div>
     </div>
     <div class="top-right">
       <span class="role-badge admin" id="roleBadge">ADMIN</span>
+      <button class="mini-btn" id="healthBtn" title="查看名单抽取状态、开关与数据是否正常">数据体检</button>
       <div class="top-meta">
         <span class="conn-dot off" id="connDot"></span>
         共 <b id="metaCount">0</b> 人 · 累计 <b id="metaDrawn">0</b> 人次
@@ -717,6 +757,24 @@ function load(){
   }catch(e){}
 }
 function save(){
+  // 防多开覆盖：合并本地已有数据中更大的累计次数 / 更新的上次抽中日期，
+  // 避免“旧标签页/旧文件”把抽完的新数据写回去（累计卡住不涨的根因之一）
+  try{
+    const old=JSON.parse(localStorage.getItem(KEY)||'{}');
+    if(old.pickCounts&&typeof old.pickCounts==='object'){
+      Object.keys(old.pickCounts).forEach(k=>{
+        const b=old.pickCounts[k]||0;
+        if(b>(state.pickCounts[k]||0))state.pickCounts[k]=b;
+      });
+    }
+    if(old.lastPicks&&typeof old.lastPicks==='object'){
+      Object.keys(old.lastPicks).forEach(k=>{
+        const b=(old.lastPicks[k]||'').slice(0,10);
+        const a=(state.lastPicks[k]||'').slice(0,10);
+        if(b&&(!a||b>a))state.lastPicks[k]=b;
+      });
+    }
+  }catch(e){}
   localStorage.setItem(KEY,JSON.stringify({
     version:3,
     names:state.names,pickCount:state.pickCount,
@@ -727,6 +785,21 @@ function save(){
     recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,
     decayPaused:state.decayPaused
   }));
+}
+
+// 数据自愈：从抽取记录(history)回填缺失的“上次抽中日期”，
+// 防止被旧版清空/多开覆盖后误判为“从未抽中”而反复被抽中
+function healLastPicks(){
+  if(!state.history||!state.history.length)return;
+  let changed=false;
+  state.history.forEach(h=>{
+    const date=(h.t||'').slice(0,10);
+    if(!date)return;
+    h.names.forEach(n=>{
+      if(!state.lastPicks[n]){state.lastPicks[n]=date;changed=true;}
+    });
+  });
+  if(changed)save();
 }
 
 // ===== WEBSOCKET =====
@@ -905,6 +978,7 @@ function renderSlotsIdle(){
 // ===== DRAW =====
 function draw(){
   if(state.role!=='admin'||isDrawing)return;
+  healLastPicks();  // 先自愈缺失的“上次抽中日期”，再过滤
   let pool=state.names.slice();
   if(!pool.length){toast('请先导入名单',true);return;}
   // 本轮不重复：先排除本轮已抽过的人
@@ -1154,7 +1228,24 @@ function longCandidates(){
 function updateLongHint(){
   const hint=$('#longHint');
   if(!hint)return;
-  hint.textContent=state.longMode?('只抽 ≥'+state.longDays+' 天未抽中 · 当前符合 '+longCandidates().length+' 人'):'';
+  hint.textContent=state.longMode
+    ?('只抽 ≥'+state.longDays+' 天未抽中 · 当前符合 '+longCandidates().length+' 人')
+    :'未开启（点左侧「只抽久未抽中」启用）';
+}
+function openHealth(){
+  healLastPicks();
+  const rows=state.names.map(n=>{
+    const cnt=state.pickCounts[n]||0;
+    const last=state.lastPicks[n];
+    const ds=last?daysBetween(last,todayStr()):null;
+    const ok=(!last||ds>=state.longDays);
+    return '<tr><td>'+n+'</td><td>'+cnt+'</td><td>'+(last||'—')+'</td><td>'+(ds===null?'从未抽中':ds+' 天')+'</td><td>'+(state.longMode?(ok?'✓ 符合':'✗ 近抽过'):'—')+'</td></tr>';
+  }).join('');
+  $('#healthBody').innerHTML=
+    '<div class="hp-line">「只抽久未抽中」：'+(state.longMode?'<b style="color:#4ecb65">已开启</b>':'<b style="color:#e5534b">未开启</b>')+' · 阈值 ≥'+state.longDays+' 天 · 当前符合 '+longCandidates().length+' 人</div>'+
+    '<div class="hp-line">「本轮不重复」：'+(state.exclude?'开':'关')+' · 抽取人数 '+state.pickCount+' · 抽取记录 '+state.history.length+' 条（最多保留 100 条）</div>'+
+    '<table class="hp-table"><tr><th>名字</th><th>累计次数</th><th>上次抽中</th><th>距上次</th><th>≥'+state.longDays+'天</th></tr>'+rows+'</table>';
+  $('#healthMask').style.display='flex';
 }
 function syncConfigUI(){
   $('#pickVal').textContent=state.pickCount;
@@ -1244,8 +1335,8 @@ function init(){
     updateLongHint();save();
     broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});
   };
-  $('#longMinus').onclick=()=>{if(state.longDays>1){state.longDays--;$('#longVal').textContent=state.longDays;updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
-  $('#longPlus').onclick=()=>{if(state.longDays<30){state.longDays++;$('#longVal').textContent=state.longDays;updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
+  $('#longMinus').onclick=()=>{if(state.longDays>1){state.longDays--;$('#longVal').textContent=state.longDays;if(!state.longMode){state.longMode=true;$('#longToggle').classList.add('on');toast('已自动开启「只抽久未抽中」');}updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
+  $('#longPlus').onclick=()=>{if(state.longDays<30){state.longDays++;$('#longVal').textContent=state.longDays;if(!state.longMode){state.longMode=true;$('#longToggle').classList.add('on');toast('已自动开启「只抽久未抽中」');}updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
 
   $('#drawBtn').onclick=draw;
 
@@ -1270,6 +1361,11 @@ function init(){
     toast(state.decayPaused?'已暂停衰减，所有人权重恢复正常':'已恢复自动衰减');
   };
 
+  // 数据体检：一眼看清开关状态、每人累计次数/上次日期/是否符合“≥N 天”
+  $('#healthBtn').onclick=openHealth;
+  $('#healthClose').onclick=()=>{$('#healthMask').style.display='none';};
+  $('#healthMask').onclick=e=>{if(e.target.id==='healthMask')$('#healthMask').style.display='none';};
+
   syncNamesFromInput(true);renderHistory();renderMeta();renderWeights();
 
   document.onkeydown=e=>{
@@ -1283,5 +1379,11 @@ document.addEventListener('DOMContentLoaded',init);
 })();
 </script>
 
+<div class="health-mask" id="healthMask" style="display:none">
+  <div class="health-panel">
+    <div class="hp-head"><span>数据体检 · 点名器 v3.1</span><button id="healthClose" aria-label="关闭">×</button></div>
+    <div class="hp-body" id="healthBody"></div>
+  </div>
+</div>
 
 </body></html>
