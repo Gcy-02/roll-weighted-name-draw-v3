@@ -368,7 +368,10 @@ textarea.names::placeholder{color:var(--muted2)}
 .long-toggle.on .ctrl-label{color:var(--gold);font-weight:500}
 #longHint{color:var(--green);font-size:11px;letter-spacing:.02em}
 .w-count.w-days{color:var(--green);border-color:rgba(78,203,113,.3);background:rgba(78,203,113,.07)}
-.is-viewer #longToggle,.is-viewer #longMinus,.is-viewer #longPlus,.is-viewer #longHint{display:none}
+.w-count.w-round{color:var(--muted);border-color:var(--line);background:rgba(255,255,255,.03)}
+.w-card.round-done{opacity:.45}
+.w-card.round-done .w-name{text-decoration:line-through;text-decoration-color:var(--muted)}
+.is-viewer #longToggle,.is-viewer #longMinus,.is-viewer #longPlus,.is-viewer #longHint,.is-viewer #roundToggle,.is-viewer #roundResetBtn{display:none}
 
 /* SOUND + DURATION SELECTOR (admin) */
 .setting-row{
@@ -493,7 +496,7 @@ textarea.names::placeholder{color:var(--muted2)}
 <div class="app is-admin" id="app">
   <header class="top">
     <div class="brand">
-      <h1>点名器<span class="ver">v3.1 · 2026-10-15</span></h1>
+      <h1>点名器<span class="ver">v3.2 · 2026-10-16</span></h1>
       <div class="sub">Roll Call · Weighted Draw</div>
     </div>
     <div class="top-right">
@@ -552,6 +555,11 @@ textarea.names::placeholder{color:var(--muted2)}
           <span class="val" id="pickVal">3</span>
           <button id="plusBtn" class="admin-only" aria-label="增加">+</button>
         </div>
+        <div class="count-ctrl long-toggle" id="roundToggle" role="button" tabindex="0" title="抽过的同学本轮不再参与，全部抽完自动开始新一轮（适合每天抽几个、轮完整个班级）">
+          <span class="ctrl-label">整轮不重复</span>
+        </div>
+        <span class="ctrl-label" id="roundHint"></span>
+        <button id="roundResetBtn" class="mini-btn" style="display:none" title="清空本轮已抽记录，重新开始一轮">重置本轮</button>
         <div class="count-ctrl long-toggle" id="longToggle" role="button" tabindex="0" title="只从超过阈值天数未抽中（含从未抽中）的人里抽取">
           <span class="ctrl-label">只抽久未抽中</span>
         </div>
@@ -640,6 +648,7 @@ const state={
   decayPaused:false,                     // 暂停衰减开关（代替清空 lastPicks）
   recoverDays:RECOVER_DAYS,            // 抽中后权重恢复天数（可配置）
   longMode:false,longDays:7,           // 只抽久未抽中模式 / 阈值天数
+  roundMode:false,roundPicked:[],roundNo:1, // 整轮不重复：本轮已抽集合 / 轮次编号
   role:'admin',wsConnected:false
 };
 
@@ -738,6 +747,9 @@ function load(){
     if(typeof d.longMode==='boolean')state.longMode=d.longMode;
     if(d.longDays)state.longDays=d.longDays;
     if(typeof d.decayPaused==='boolean')state.decayPaused=d.decayPaused;
+    if(typeof d.roundMode==='boolean')state.roundMode=d.roundMode;
+    if(Array.isArray(d.roundPicked))state.roundPicked=d.roundPicked;
+    if(d.roundNo)state.roundNo=d.roundNo;
     // 兼容旧数据：被抽次数还在但“上次抽中日期”缺失（旧版“恢复衰减”清空过），
     // 从抽取记录(history，最新在前)回溯重建最近一次抽中日期
     if(d.history){
@@ -783,7 +795,7 @@ function save(){
     pickCounts:state.pickCounts,lastPicks:state.lastPicks,
     sound:state.sound,duration:state.duration,decay:state.decay,
     recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,
-    decayPaused:state.decayPaused
+    decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked,roundNo:state.roundNo
   }));
 }
 
@@ -981,29 +993,44 @@ function draw(){
   healLastPicks();  // 先自愈缺失的“上次抽中日期”，再过滤
   let pool=state.names.slice();
   if(!pool.length){toast('请先导入名单',true);return;}
-  // 本轮不重复：先排除本轮已抽过的人
-  if(state.exclude){
-    const unDrawn=pool.filter(n=>!state.drawnSet.includes(n));
-    if(unDrawn.length<state.pickCount){
-      toast('可抽人数不足，已自动重置本轮',true);
-      state.drawnSet=[];
+  let target=state.pickCount;
+  if(state.roundMode){
+    // ===== 整轮不重复（优先级最高）：抽过的本轮不再参与，全部抽完自动开始新一轮 =====
+    const rest=pool.filter(n=>!state.roundPicked.includes(n));
+    if(rest.length===0){
+      state.roundPicked=[];state.roundNo=(state.roundNo||1)+1;
+      save();updateRoundHint();renderWeights();
+      toast('本轮 '+pool.length+' 人已全部抽完，自动开始新一轮');
     }else{
-      pool=unDrawn;
+      pool=rest;
+      target=Math.min(state.pickCount,pool.length);
+      if(pool.length<state.pickCount)toast('本轮只剩 '+pool.length+' 人，本次全部抽完');
     }
+  }else{
+    // 本轮不重复：先排除本轮已抽过的人
+    if(state.exclude){
+      const unDrawn=pool.filter(n=>!state.drawnSet.includes(n));
+      if(unDrawn.length<state.pickCount){
+        toast('可抽人数不足，已自动重置本轮',true);
+        state.drawnSet=[];
+      }else{
+        pool=unDrawn;
+      }
+    }
+    // 只抽久未抽中：在上一步基础上，仅从超过 longDays 天未抽中（含从未抽中）的人里抽取
+    if(state.longMode){
+      const cand=pool.filter(n=>{
+        const last=state.lastPicks[n];
+        if(!last)return true;
+        return daysBetween(last,todayStr())>=state.longDays;
+      });
+      if(cand.length===0){toast('没有超过 '+state.longDays+' 天未抽中的人',true);return;}
+      if(cand.length<state.pickCount){toast('符合「≥'+state.longDays+' 天未抽中」的只有 '+cand.length+' 人，少于抽取人数',true);return;}
+      pool=cand;
+    }
+    if(pool.length<state.pickCount){toast('名单人数少于抽取人数',true);return;}
   }
-  // 只抽久未抽中：在上一步基础上，仅从超过 longDays 天未抽中（含从未抽中）的人里抽取
-  if(state.longMode){
-    const cand=pool.filter(n=>{
-      const last=state.lastPicks[n];
-      if(!last)return true;
-      return daysBetween(last,todayStr())>=state.longDays;
-    });
-    if(cand.length===0){toast('没有超过 '+state.longDays+' 天未抽中的人',true);return;}
-    if(cand.length<state.pickCount){toast('符合「≥'+state.longDays+' 天未抽中」的只有 '+cand.length+' 人，少于抽取人数',true);return;}
-    pool=cand;
-  }
-  if(pool.length<state.pickCount){toast('名单人数少于抽取人数',true);return;}
-  const winners=pickWinners(pool,state.pickCount);
+  const winners=pickWinners(pool,target);
   const now=new Date();
   const ts=now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate())+' '+p2(now.getHours())+':'+p2(now.getMinutes())+':'+p2(now.getSeconds());
   broadcast('draw',{winners,timestamp:ts});
@@ -1079,6 +1106,7 @@ function finishDraw(winners,timestamp){
   btn.querySelector('.txt').textContent='开 始 抽 取';
   if(state.role==='admin'){
     if(state.exclude)state.drawnSet.push(...winners);
+    if(state.roundMode)state.roundPicked.push(...winners);
     // 记录累计次数 + 上次抽中日期（用于自动衰减）
     const today=todayStr();
     winners.forEach(n=>{
@@ -1087,7 +1115,7 @@ function finishDraw(winners,timestamp){
     });
     state.history.unshift({t:timestamp||fmtNow(),names:winners.slice()});
     if(state.history.length>100)state.history.length=100;
-    save();renderHistory();renderMeta();renderWeights();
+    save();renderHistory();renderMeta();renderWeights();updateRoundHint();
     broadcast('history',state.history);
     broadcast('stats',{pickCounts:state.pickCounts,lastPicks:state.lastPicks});
   }else{
@@ -1143,12 +1171,17 @@ function renderWeights(){
     const eff=getEffectiveWeight(n);
     const factor=getDecayFactor(n);
     const cnt=state.pickCounts[n]||0;
+    const roundDone=state.roundMode&&state.roundPicked.includes(n);
     const card=document.createElement('div');
-    card.className='w-card'+(factor<1?' cool':'');
+    card.className='w-card'+(factor<1?' cool':'')+(roundDone?' round-done':'');
 
     const head=document.createElement('div');head.className='w-head';
     const nm=document.createElement('span');nm.className='w-name';nm.textContent=n;
     head.appendChild(nm);
+    if(roundDone){
+      const rc=document.createElement('span');rc.className='w-count w-round';rc.textContent='本轮已抽';
+      head.appendChild(rc);
+    }
     if(cnt>0){ // 没被抽过不显示0次
       const cc=document.createElement('span');cc.className='w-count';cc.textContent='被抽 '+cnt+' 次';
       head.appendChild(cc);
@@ -1232,6 +1265,16 @@ function updateLongHint(){
     ?('只抽 ≥'+state.longDays+' 天未抽中 · 当前符合 '+longCandidates().length+' 人')
     :'未开启（点左侧「只抽久未抽中」启用）';
 }
+function updateRoundHint(){
+  const el=$('#roundHint');
+  const btn=$('#roundResetBtn');
+  if(!el)return;
+  if(!state.roundMode){el.textContent='';if(btn)btn.style.display='none';return;}
+  const total=state.names.length;
+  const done=state.roundPicked.length;
+  el.textContent='本轮已抽 '+done+'/'+total+' · 剩余 '+(total-done)+' 人';
+  if(btn)btn.style.display=done?'inline-block':'none';
+}
 function openHealth(){
   healLastPicks();
   const rows=state.names.map(n=>{
@@ -1239,12 +1282,13 @@ function openHealth(){
     const last=state.lastPicks[n];
     const ds=last?daysBetween(last,todayStr()):null;
     const ok=(!last||ds>=state.longDays);
-    return '<tr><td>'+n+'</td><td>'+cnt+'</td><td>'+(last||'—')+'</td><td>'+(ds===null?'从未抽中':ds+' 天')+'</td><td>'+(state.longMode?(ok?'✓ 符合':'✗ 近抽过'):'—')+'</td></tr>';
+    return '<tr><td>'+n+'</td><td>'+cnt+'</td><td>'+(last||'—')+'</td><td>'+(ds===null?'从未抽中':ds+' 天')+'</td><td>'+(state.longMode?(ok?'✓ 符合':'✗ 近抽过'):'—')+'</td>'+(state.roundMode?(state.roundPicked.includes(n)?'<td>✓ 已抽</td>':'<td>待抽</td>'):'')+'</tr>';
   }).join('');
   $('#healthBody').innerHTML=
     '<div class="hp-line">「只抽久未抽中」：'+(state.longMode?'<b style="color:#4ecb65">已开启</b>':'<b style="color:#e5534b">未开启</b>')+' · 阈值 ≥'+state.longDays+' 天 · 当前符合 '+longCandidates().length+' 人</div>'+
+    '<div class="hp-line">「整轮不重复」：'+(state.roundMode?'<b style="color:#4ecb65">已开启</b>':'<b style="color:#e5534b">未开启</b>')+' · 本轮已抽 '+state.roundPicked.length+'/'+state.names.length+' 人 · 第 '+state.roundNo+' 轮</div>'+
     '<div class="hp-line">「本轮不重复」：'+(state.exclude?'开':'关')+' · 抽取人数 '+state.pickCount+' · 抽取记录 '+state.history.length+' 条（最多保留 100 条）</div>'+
-    '<table class="hp-table"><tr><th>名字</th><th>累计次数</th><th>上次抽中</th><th>距上次</th><th>≥'+state.longDays+'天</th></tr>'+rows+'</table>';
+    '<table class="hp-table"><tr><th>名字</th><th>累计次数</th><th>上次抽中</th><th>距上次</th><th>≥'+state.longDays+'天</th>'+(state.roundMode?'<th>本轮</th>':'')+'</tr>'+rows+'</table>';
   $('#healthMask').style.display='flex';
 }
 function syncConfigUI(){
@@ -1259,8 +1303,10 @@ function syncConfigUI(){
   $('#legendRecover').textContent=state.recoverDays;
   $('#longVal').textContent=state.longDays;
   $('#longToggle').classList.toggle('on',state.longMode);
+  $('#roundToggle').classList.toggle('on',state.roundMode);
   $('#decayWeights').textContent=state.decayPaused?'恢复衰减':'暂停衰减';
   updateLongHint();
+  updateRoundHint();
 }
 
 // ===== NAMES INPUT =====
@@ -1319,24 +1365,39 @@ function init(){
   };
   $('#clearNames').onclick=()=>{$('#namesInput').value='';state.names=[];state.drawnSet=[];syncNamesFromInput();toast('名单已清空');};
 
-  $('#minusBtn').onclick=()=>{if(state.pickCount>1){state.pickCount--;$('#pickVal').textContent=state.pickCount;save();renderSlotsIdle();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
-  $('#plusBtn').onclick=()=>{if(state.pickCount<12){state.pickCount++;$('#pickVal').textContent=state.pickCount;save();renderSlotsIdle();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
+  $('#minusBtn').onclick=()=>{if(state.pickCount>1){state.pickCount--;$('#pickVal').textContent=state.pickCount;save();renderSlotsIdle();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});}};
+  $('#plusBtn').onclick=()=>{if(state.pickCount<12){state.pickCount++;$('#pickVal').textContent=state.pickCount;save();renderSlotsIdle();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});}};
 
-  $('#soundSel').onchange=e=>{state.sound=e.target.value;save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});};
+  $('#soundSel').onchange=e=>{state.sound=e.target.value;save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});};
   $('#durSlider').oninput=e=>{state.duration=parseFloat(e.target.value);$('#durVal').textContent=state.duration+'s';save();};
-  $('#durSlider').onchange=e=>{broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});};
-  $('#decaySel').onchange=e=>{state.decay=parseFloat(e.target.value);save();renderWeights();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});};
-  $('#recoverSel').onchange=e=>{state.recoverDays=parseInt(e.target.value,10);save();renderWeights();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});};
+  $('#durSlider').onchange=e=>{broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});};
+  $('#decaySel').onchange=e=>{state.decay=parseFloat(e.target.value);save();renderWeights();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});};
+  $('#recoverSel').onchange=e=>{state.recoverDays=parseInt(e.target.value,10);save();renderWeights();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});};
 
   // 只抽久未抽中模式
   $('#longToggle').onclick=()=>{
     state.longMode=!state.longMode;
     $('#longToggle').classList.toggle('on',state.longMode);
     updateLongHint();save();
-    broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});
+    broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});
   };
-  $('#longMinus').onclick=()=>{if(state.longDays>1){state.longDays--;$('#longVal').textContent=state.longDays;if(!state.longMode){state.longMode=true;$('#longToggle').classList.add('on');toast('已自动开启「只抽久未抽中」');}updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
-  $('#longPlus').onclick=()=>{if(state.longDays<30){state.longDays++;$('#longVal').textContent=state.longDays;if(!state.longMode){state.longMode=true;$('#longToggle').classList.add('on');toast('已自动开启「只抽久未抽中」');}updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});}};
+  // 整轮不重复：抽过的不再参与，全部抽完自动新一轮
+  $('#roundToggle').onclick=()=>{
+    state.roundMode=!state.roundMode;
+    if(state.roundMode&&!state.roundPicked.length)state.roundNo=(state.roundNo||1);
+    $('#roundToggle').classList.toggle('on',state.roundMode);
+    updateRoundHint();save();renderWeights();
+    toast(state.roundMode?'已开启「整轮不重复」：抽过的不再参与':'已关闭「整轮不重复」');
+    broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});
+  };
+  $('#roundResetBtn').onclick=()=>{
+    if(!state.roundPicked.length){toast('本轮还没抽过人，无需重置');return;}
+    state.roundPicked=[];state.roundNo=(state.roundNo||1)+1;
+    save();renderWeights();updateRoundHint();
+    toast('已重置，开始第 '+state.roundNo+' 轮');
+  };
+  $('#longMinus').onclick=()=>{if(state.longDays>1){state.longDays--;$('#longVal').textContent=state.longDays;if(!state.longMode){state.longMode=true;$('#longToggle').classList.add('on');toast('已自动开启「只抽久未抽中」');}updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});}};
+  $('#longPlus').onclick=()=>{if(state.longDays<30){state.longDays++;$('#longVal').textContent=state.longDays;if(!state.longMode){state.longMode=true;$('#longToggle').classList.add('on');toast('已自动开启「只抽久未抽中」');}updateLongHint();save();broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});}};
 
   $('#drawBtn').onclick=draw;
 
@@ -1357,7 +1418,7 @@ function init(){
     state.decayPaused=!state.decayPaused;
     $('#decayWeights').textContent=state.decayPaused?'恢复衰减':'暂停衰减';
     save();renderWeights();
-    broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused});
+    broadcast('config',{pickCount:state.pickCount,sound:state.sound,duration:state.duration,decay:state.decay,recoverDays:state.recoverDays,longMode:state.longMode,longDays:state.longDays,decayPaused:state.decayPaused,roundMode:state.roundMode,roundPicked:state.roundPicked});
     toast(state.decayPaused?'已暂停衰减，所有人权重恢复正常':'已恢复自动衰减');
   };
 
@@ -1381,7 +1442,7 @@ document.addEventListener('DOMContentLoaded',init);
 
 <div class="health-mask" id="healthMask" style="display:none">
   <div class="health-panel">
-    <div class="hp-head"><span>数据体检 · 点名器 v3.1</span><button id="healthClose" aria-label="关闭">×</button></div>
+    <div class="hp-head"><span>数据体检 · 点名器 v3.2</span><button id="healthClose" aria-label="关闭">×</button></div>
     <div class="hp-body" id="healthBody"></div>
   </div>
 </div>
